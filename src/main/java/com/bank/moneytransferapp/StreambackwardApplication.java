@@ -33,74 +33,66 @@ public class StreambackwardApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(StreambackwardApplication.class, args);
-		
+
 		Properties config = new Properties();
 
-        config.put(StreamsConfig.APPLICATION_ID_CONFIG, "bank-Transaction-backword");
-        config.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:9092");
-        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+		config.put(StreamsConfig.APPLICATION_ID_CONFIG, "bank-Transaction-backword");
+		config.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:9092");
+		config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
-        // we disable the cache to demonstrate all the "steps" involved in the transformation - not recommended in prod
-        config.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
+		// we disable the cache to demonstrate all the "steps" involved in the
+		// transformation - not recommended in prod
+		config.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG, "0");
 
-        // Exactly once processing!!
-        config.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE);
-        
-        // json Serde
-        final Serializer<JsonNode> jsonSerializer = new JsonSerializer();
-        final Deserializer<JsonNode> jsonDeserializer = new JsonDeserializer();
-        final Serde<JsonNode> jsonSerde = Serdes.serdeFrom(jsonSerializer, jsonDeserializer);
-        
-        StreamsBuilder builder = new StreamsBuilder();
+		// Exactly once processing!!
+		config.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE);
 
-        KStream<String, JsonNode> bankTransactions = builder.stream("bank3",
-                Consumed.with(Serdes.String(), jsonSerde));
+		// json Serde
+		final Serializer<JsonNode> jsonSerializer = new JsonSerializer();
+		final Deserializer<JsonNode> jsonDeserializer = new JsonDeserializer();
+		final Serde<JsonNode> jsonSerde = Serdes.serdeFrom(jsonSerializer, jsonDeserializer);
 
+		StreamsBuilder builder = new StreamsBuilder();
 
-        // create the initial json object for balances
-        ObjectNode initialBalanceb = JsonNodeFactory.instance.objectNode();
-        initialBalanceb.put("SenderAccountnumber", 0);
-        initialBalanceb.put("ReceiverAccountnumber", 0);
-        initialBalanceb.put("Report", 0);
-        initialBalanceb.put("Amountb", 0);
-        
-        initialBalanceb.put("time", Instant.ofEpochMilli(0L).toString());
+		KStream<String, JsonNode> bankTransactions = builder.stream("bank3", Consumed.with(Serdes.String(), jsonSerde));
 
-        KTable<String, JsonNode> bankBalance = bankTransactions
-                .groupByKey(Serialized.with(Serdes.String(), jsonSerde))
-                .aggregate(
-                        () -> initialBalanceb,
-                        (key, transactionr, Report) -> newBalanceb(transactionr, Report),
-                        Materialized.<String, JsonNode, KeyValueStore<Bytes, byte[]>>as("bank-balance-agg")
-                                .withKeySerde(Serdes.String())
-                                .withValueSerde(jsonSerde)
-                );
+		// create the initial json object for balances
+		ObjectNode initialBalanceb = JsonNodeFactory.instance.objectNode();
+		initialBalanceb.put("SenderAccountnumber", 0);
+		initialBalanceb.put("ReceiverAccountnumber", 0);
+		initialBalanceb.put("Report", 0);
+		initialBalanceb.put("Amountb", 0);
 
-        bankBalance.toStream().to("bank4", Produced.with(Serdes.String(), jsonSerde));
+		initialBalanceb.put("time", Instant.ofEpochMilli(0L).toString());
 
-        KafkaStreams streams = new KafkaStreams(builder.build(), config);
-        streams.cleanUp();
-        streams.start();
+		KTable<String, JsonNode> bankBalance = bankTransactions.groupByKey(Serialized.with(Serdes.String(), jsonSerde))
+				.aggregate(() -> initialBalanceb, (key, transactionr, Report) -> newBalanceb(transactionr, Report),
+						Materialized.<String, JsonNode, KeyValueStore<Bytes, byte[]>>as("bank-balance-agg")
+								.withKeySerde(Serdes.String()).withValueSerde(jsonSerde));
 
+		bankBalance.toStream().to("bank4", Produced.with(Serdes.String(), jsonSerde));
 
-        // print the topology
-        streams.localThreadsMetadata().forEach(data -> System.out.println(data));
+		KafkaStreams streams = new KafkaStreams(builder.build(), config);
+		streams.cleanUp();
+		streams.start();
 
-        // shutdown hook to correctly close the streams application
-        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
-    }
+		// print the topology
+		streams.localThreadsMetadata().forEach(data -> System.out.println(data));
 
-    private static JsonNode newBalanceb(JsonNode transactionr, JsonNode Report) {
-        // create a new balance json object
-        ObjectNode newBalanceb = JsonNodeFactory.instance.objectNode();
-        newBalanceb.put("SenderAccountnumberb",  transactionr.get("SenderAccountnumber").asInt());
-        newBalanceb.put("ReceiverAccountnumber",  transactionr.get("ReceiverAccountnumber").asInt());
-        newBalanceb.put("Reportb", transactionr.get("Report"));
-        newBalanceb.put("Amountbb", transactionr.get("Amountb").asInt());
-        Instant now = Instant.now();
-        newBalanceb.put("time", now.toString());
-        return newBalanceb;
-    }
-	
+		// shutdown hook to correctly close the streams application
+		Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+	}
+
+	private static JsonNode newBalanceb(JsonNode transactionr, JsonNode Report) {
+		// create a new balance json object
+		ObjectNode newBalanceb = JsonNodeFactory.instance.objectNode();
+		newBalanceb.put("SenderAccountnumberb", transactionr.get("SenderAccountnumber").asInt());
+		newBalanceb.put("ReceiverAccountnumber", transactionr.get("ReceiverAccountnumber").asInt());
+		newBalanceb.put("Reportb", transactionr.get("Report"));
+		newBalanceb.put("Amountbb", transactionr.get("Amountb").asInt());
+		Instant now = Instant.now();
+		newBalanceb.put("time", now.toString());
+		return newBalanceb;
+	}
 
 }
